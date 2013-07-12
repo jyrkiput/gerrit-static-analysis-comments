@@ -1,0 +1,53 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.jenkins-ci.plugins</groupId>
+        <artifactId>plugin</artifactId>
+        <version>1.522</version>
+        <!-- which version of Jenkins is this plugin built against? -->
+    </parent>
+
+    <groupId>org.jenkins.plugins</groupId>
+    <artifactId>gerrit-static-analysis-comments</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>hpi</packaging>
+    <description>Integrates with Static Analysis Collector with Gerrit code review.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.sonyericsson.hudson.plugins.gerrit</groupId>
+            <artifactId>gerrit-trigger</artifactId>
+            <version>2.10.2-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jvnet.hudson.plugins</groupId>
+            <artifactId>analysis-collector</artifactId>
+            <version>1.35</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+            <plugin>
+                <groupId>org.jenkins-ci.main</groupId>
+                <artifactId>maven-plugin</artifactId>
+                <version>1.399</version>
+            </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+    <profiles>
+        <profile>
+            <id>development</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.jvnet.hudson.plugins</groupId>
+                    <artifactId>pmd</artifactId>
+                    <version>3.22</version>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+</project>
