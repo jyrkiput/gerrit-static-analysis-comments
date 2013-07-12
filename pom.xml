@@ -25,6 +25,11 @@
             <artifactId>analysis-collector</artifactId>
             <version>1.35</version>
         </dependency>
+        <dependency>
+            <groupId>org.jenkins-ci.plugins</groupId>
+            <artifactId>git-client</artifactId>
+            <version>1.0.2</version>
+        </dependency>
     </dependencies>
 
     <build>
