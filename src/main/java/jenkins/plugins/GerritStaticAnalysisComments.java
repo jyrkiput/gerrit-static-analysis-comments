@@ -12,44 +12,105 @@ import hudson.model.TaskListener;
 import hudson.plugins.analysis.collector.AnalysisResult;
 import hudson.plugins.analysis.collector.AnalysisResultAction;
 import hudson.plugins.analysis.core.AbstractResultAction;
+import hudson.plugins.analysis.core.AnnotationDifferencer;
 import hudson.plugins.analysis.core.BuildResult;
 import hudson.plugins.analysis.core.ParserResult;
 import hudson.plugins.analysis.util.model.FileAnnotation;
+import hudson.plugins.git.util.BuildData;
 import hudson.remoting.VirtualChannel;
-import hudson.util.RunList;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
-import org.eclipse.jgit.treewalk.TreeWalk;
 import org.jenkinsci.plugins.gitclient.Git;
 import org.jenkinsci.plugins.gitclient.GitClient;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Extension
 public class GerritStaticAnalysisComments extends GerritMessageProvider {
 
+
+    transient private final Map<ObjectId, String> buildIdMap = new ConcurrentHashMap<ObjectId, String>();
     @Override
     public Collection<CommentedFile> getFileComments(AbstractBuild build) {
+
         Collection<CommentedFile> comments = new ArrayList<CommentedFile>();
+
         if (Hudson.getInstance().getPlugin("analysis-collector") != null) {
 
-            AnalysisResult result = getAnalysisResult(build);
-
-            Map<String, List<LineComment>> fileComments = getComments(build, result);
+            Set<FileAnnotation> result = getFileAnnotations(build);
 
             List<ObjectId> parents = getParents(build);
 
-            for(Map.Entry<String, List<LineComment>> entry : fileComments.entrySet()) {
-                comments.add(new CommentedFile(entry.getKey(), entry.getValue()));
+            Set<FileAnnotation> existingWarnigs = new HashSet<FileAnnotation>();
+
+            boolean foundPreviousAction = false;
+            for(ObjectId parent : parents) {
+
+                AbstractBuild parentBuild = findBuildForParent(build, parent);
+
+                AbstractResultAction<? extends BuildResult> action = getAction(parentBuild);
+
+                if(action != null) {
+                    foundPreviousAction = true;
+                    Collection<FileAnnotation> fileAnnotations = getFileAnnotations(parentBuild);
+                    existingWarnigs.addAll(fileAnnotations);
+                }
+            }
+            if(foundPreviousAction) {
+                //If there weren't previous result, do not send warnings. It might fill the review
+                // with possibly thousands of warnings.
+                Set<FileAnnotation> newAnnotations =
+                        AnnotationDifferencer.getNewAnnotations(result, existingWarnigs);
+                Map<String, List<LineComment>> fileComments = getComments(build, newAnnotations);
+
+                for(Map.Entry<String, List<LineComment>> entry : fileComments.entrySet()) {
+                    comments.add(new CommentedFile(entry.getKey(), entry.getValue()));
+                }
             }
         }
 
         return comments;
+    }
+
+    private AbstractResultAction<? extends BuildResult> getAction(AbstractBuild build) {
+        AbstractResultAction<? extends BuildResult> action = null;
+        if(build != null) {
+            action = build.getAction(AnalysisResultAction.class);
+        }
+        return action;
+    }
+
+    private AbstractBuild findBuildForParent(AbstractBuild build, ObjectId parent) {
+        if(!buildIdMap.containsKey(parent)) {
+            String parentBuildId = findParent(parent, build);
+            buildIdMap.put(parent, parentBuildId);
+        }
+        String id = buildIdMap.get(parent);
+        AbstractBuild parentBuild = null;
+        if(id != null) {
+            parentBuild = build.getProject().getBuild(id);
+        }
+        return parentBuild;
+    }
+
+    private String findParent(ObjectId parent, AbstractBuild build) {
+        AbstractBuild previousBuild = build.getPreviousBuild();
+        while (previousBuild != null) {
+            BuildData buildData = previousBuild.getAction(BuildData.class);
+            if(buildData != null) {
+                if(buildData.lastBuild.getSHA1().equals(parent)) {
+                    return previousBuild.getId();
+                }
+            }
+            previousBuild = previousBuild.getPreviousBuild();
+        }
+        return null;
     }
 
     private List<ObjectId> getParents(final AbstractBuild build) {
@@ -87,10 +148,10 @@ public class GerritStaticAnalysisComments extends GerritMessageProvider {
         }
     }
 
-    private Map<String, List<LineComment>> getComments(AbstractBuild build, AnalysisResult result) {
+    private Map<String, List<LineComment>> getComments(AbstractBuild build, final Collection<FileAnnotation> newWarnings) {
         Map<String, List<LineComment>> fileComments = new HashMap<String, List<LineComment>>();
 
-        for(FileAnnotation annotation : result.getNewWarnings())
+        for(FileAnnotation annotation : newWarnings)
         {
             String filePath = getFilePath(build, annotation);
 
@@ -105,16 +166,13 @@ public class GerritStaticAnalysisComments extends GerritMessageProvider {
         return fileComments;
     }
 
-    private AnalysisResult getAnalysisResult(AbstractBuild build) {
-        ParserResult overallResult = new ParserResult(build.getWorkspace());
-        String defaultEncoding = "utf-8";
-        AbstractResultAction<? extends BuildResult> action = build.getAction(AnalysisResultAction.class);
-
+    private Set<FileAnnotation> getFileAnnotations(AbstractBuild build) {
+        Set<FileAnnotation> resultAnnotations = Collections.emptySet();
+        AbstractResultAction<? extends BuildResult> action = getAction(build);
         if (action != null) {
-            Collection<FileAnnotation> resultAnnotations = action.getResult().getNewWarnings();
-            overallResult.addAnnotations(resultAnnotations);
+            resultAnnotations = action.getResult().getAnnotations();
         }
-        return new AnalysisResult(build, defaultEncoding, overallResult, false);
+        return resultAnnotations;
     }
 
     private String getFilePath(AbstractBuild build, FileAnnotation annotation) {
