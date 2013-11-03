@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.sonyericsson.hudson.plugins.gerrit.trigger.gerritnotifier.GerritMessageProvider;
 import com.sonyericsson.hudson.plugins.gerrit.trigger.gerritnotifier.rest.object.CommentedFile;
 import com.sonyericsson.hudson.plugins.gerrit.trigger.gerritnotifier.rest.object.LineComment;
+import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.model.AbstractBuild;
@@ -115,31 +116,11 @@ public class GerritStaticAnalysisComments extends GerritMessageProvider {
 
     private List<ObjectId> getParents(final AbstractBuild build) {
 
-        FilePath.FileCallable<List<ObjectId>> getParents = new FilePath.FileCallable<List<ObjectId>>() {
-
-            public List<ObjectId> invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
-                GitClient client =
-                        Git.with(TaskListener.NULL, build.getEnvironment(TaskListener.NULL)).
-                                in(f).getClient();
-                Repository repository = client.getRepository();
-                RevWalk walk = new RevWalk(repository);
-                org.eclipse.jgit.api.Git git = new org.eclipse.jgit.api.Git(repository);
-                Iterable<RevCommit> revCommits = null;
-                try {
-                    revCommits = git.log().call();
-                } catch (GitAPIException e) {
-                    e.printStackTrace();
-                }
-                RevCommit current = revCommits.iterator().next();
-                RevCommit[] parents = current.getParents();
-                List<ObjectId> parentIds = Lists.newArrayList();
-                for (RevCommit parent : parents) {
-                    parentIds.add(parent.getId());
-                }
-                return parentIds;
-            }
-        };
         try {
+            final EnvVars environment = build.getEnvironment(TaskListener.NULL);
+
+            FilePath.FileCallable<List<ObjectId>> getParents = new ParentResolver(environment);
+
             return build.getWorkspace().act(getParents);
         } catch (IOException e) {
             return Collections.emptyList();
@@ -191,5 +172,35 @@ public class GerritStaticAnalysisComments extends GerritMessageProvider {
         //remove workspace name
         fileName = fileName.substring(workspaceName.length() + 1);
         return fileName;
+    }
+
+    private static class ParentResolver implements FilePath.FileCallable<List<ObjectId>> {
+
+        private final EnvVars environment;
+
+        public ParentResolver(EnvVars environment) {
+            this.environment = environment;
+        }
+
+        public List<ObjectId> invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+            GitClient client =
+                    Git.with(TaskListener.NULL, environment).
+                            in(f).getClient();
+            Repository repository = client.getRepository();
+            org.eclipse.jgit.api.Git git = new org.eclipse.jgit.api.Git(repository);
+            Iterable<RevCommit> revCommits = null;
+            try {
+                revCommits = git.log().call();
+            } catch (GitAPIException e) {
+                e.printStackTrace();
+            }
+            RevCommit current = revCommits.iterator().next();
+            RevCommit[] parents = current.getParents();
+            List<ObjectId> parentIds = Lists.newArrayList();
+            for (RevCommit parent : parents) {
+                parentIds.add(parent.getId());
+            }
+            return parentIds;
+        }
     }
 }
