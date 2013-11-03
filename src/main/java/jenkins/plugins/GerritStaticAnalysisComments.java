@@ -1,6 +1,9 @@
 package jenkins.plugins;
 
+import com.google.common.base.Function;
+import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.sonyericsson.hudson.plugins.gerrit.trigger.gerritnotifier.GerritMessageProvider;
 import com.sonyericsson.hudson.plugins.gerrit.trigger.gerritnotifier.rest.object.CommentedFile;
 import com.sonyericsson.hudson.plugins.gerrit.trigger.gerritnotifier.rest.object.LineComment;
@@ -27,6 +30,7 @@ import org.eclipse.jgit.revwalk.RevWalk;
 import org.jenkinsci.plugins.gitclient.Git;
 import org.jenkinsci.plugins.gitclient.GitClient;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
@@ -134,7 +138,7 @@ public class GerritStaticAnalysisComments extends GerritMessageProvider {
 
         for(FileAnnotation annotation : newWarnings)
         {
-            String filePath = getFilePath(build, annotation);
+            String filePath = annotation.getFileName();
 
             String message = annotation.getMessage();
             int line = annotation.getPrimaryLineNumber();
@@ -147,12 +151,18 @@ public class GerritStaticAnalysisComments extends GerritMessageProvider {
         return fileComments;
     }
 
-    private Set<FileAnnotation> getFileAnnotations(AbstractBuild build) {
+    private Set<FileAnnotation> getFileAnnotations(final AbstractBuild build) {
         Set<FileAnnotation> resultAnnotations = Collections.emptySet();
         AbstractResultAction<? extends BuildResult> action = getAction(build);
         if (action != null) {
             resultAnnotations = action.getResult().getAnnotations();
         }
+        resultAnnotations = Sets.newHashSet(Collections2.transform(resultAnnotations, new Function<FileAnnotation, FileAnnotation>() {
+            public FileAnnotation apply(@Nullable FileAnnotation fileAnnotation) {
+                fileAnnotation.setFileName(getFilePath(build, fileAnnotation));
+                return fileAnnotation;
+            }
+        }));
         return resultAnnotations;
     }
 
@@ -168,9 +178,12 @@ public class GerritStaticAnalysisComments extends GerritMessageProvider {
         }
 
         //take path including workspace name.
-        fileName = fileName.substring(fileName.indexOf(workspaceName));
+        int index = fileName.indexOf(workspaceName);
+        if(index >= 0) {
+            fileName = fileName.substring(index);
+            fileName = fileName.substring(workspaceName.length() + 1);
+        }
         //remove workspace name
-        fileName = fileName.substring(workspaceName.length() + 1);
         return fileName;
     }
 
