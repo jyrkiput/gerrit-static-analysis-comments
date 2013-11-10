@@ -159,14 +159,14 @@ public class GerritStaticAnalysisComments extends GerritMessageProvider {
         }
         resultAnnotations = Sets.newHashSet(Collections2.transform(resultAnnotations, new Function<FileAnnotation, FileAnnotation>() {
             public FileAnnotation apply(@Nullable FileAnnotation fileAnnotation) {
-                fileAnnotation.setFileName(getFilePath(build, fileAnnotation));
+                fileAnnotation.setFileName(normalizeFilePath(build, fileAnnotation));
                 return fileAnnotation;
             }
         }));
         return resultAnnotations;
     }
 
-    private String getFilePath(AbstractBuild build, FileAnnotation annotation) {
+    private String normalizeFilePath(AbstractBuild build, FileAnnotation annotation) {
         String fileName = annotation.getFileName();
         String workspaceName;
         try {
