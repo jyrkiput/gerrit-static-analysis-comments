@@ -13,12 +13,10 @@ import hudson.FilePath;
 import hudson.model.AbstractBuild;
 import hudson.model.Hudson;
 import hudson.model.TaskListener;
-import hudson.plugins.analysis.collector.AnalysisResult;
 import hudson.plugins.analysis.collector.AnalysisResultAction;
 import hudson.plugins.analysis.core.AbstractResultAction;
 import hudson.plugins.analysis.core.AnnotationDifferencer;
 import hudson.plugins.analysis.core.BuildResult;
-import hudson.plugins.analysis.core.ParserResult;
 import hudson.plugins.analysis.util.model.FileAnnotation;
 import hudson.plugins.git.util.BuildData;
 import hudson.remoting.VirtualChannel;
@@ -26,7 +24,6 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
-import org.eclipse.jgit.revwalk.RevWalk;
 import org.jenkinsci.plugins.gitclient.Git;
 import org.jenkinsci.plugins.gitclient.GitClient;
 
@@ -183,7 +180,6 @@ public class GerritStaticAnalysisComments extends GerritMessageProvider {
             fileName = fileName.substring(index);
             fileName = fileName.substring(workspaceName.length() + 1);
         }
-        //remove workspace name
         return fileName;
     }
 
